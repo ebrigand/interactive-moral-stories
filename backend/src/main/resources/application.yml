@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+openai:
+  base-url: https://api.openai.com/v1
+  api-key: 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
+  model: gpt-4.1
+  timeout-seconds: 30
+  api:
+    key: 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
+  tts:
+    model: gpt-4o-mini-tts
+
+logging:
+  level:
+    root: INFO
+    com.istory.storyengine: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: WARN
