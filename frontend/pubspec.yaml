@@ -1,0 +1,14 @@
+name: istory
+description: Interactive moral stories for children
+version: 0.1.0
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.1
+
+flutter:
+  uses-material-design: true
