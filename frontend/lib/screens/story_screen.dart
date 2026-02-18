@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -28,7 +29,7 @@ class StoryScreen extends StatefulWidget {
   });
 
   @override
-  State<StoryScreen> createState() => _StoryScreenState();
+  State createState() => _StoryScreenState();
 }
 
 class _StoryScreenState extends State<StoryScreen> {
@@ -72,7 +73,6 @@ class _StoryScreenState extends State<StoryScreen> {
     }
   }
 
-
   @override
   void initState() {
     super.initState();
@@ -94,15 +94,14 @@ class _StoryScreenState extends State<StoryScreen> {
   }
 
   // --- quote helpers ---
-
   List<_NarrPart> _splitNarrationWithQuotes(String narration) {
     final s = narration;
     final parts = <_NarrPart>[];
 
     // Matches: "..." or « ... »
     final reQuotes = RegExp(r'("([^"]+)")|(«([^»]+)»)', multiLine: true);
-    int idx = 0;
 
+    int idx = 0;
     for (final m in reQuotes.allMatches(s)) {
       if (m.start > idx) {
         parts.add(_NarrPart(false, s.substring(idx, m.start)));
@@ -151,9 +150,21 @@ class _StoryScreenState extends State<StoryScreen> {
     return 'NEUTRAL';
   }
 
+  bool _isHeroSpeaker(String speaker) {
+    final sp = speaker.trim();
+    if (sp.isEmpty) return false;
+    if (sp.toUpperCase() == 'HERO') return true;
+
+    final player = (widget.api.playerName ?? '').trim();
+    if (player.isNotEmpty && sp.toLowerCase() == player.toLowerCase()) return true;
+
+    return false;
+  }
+
   Future<void> _playMp3Bytes(List<int> bytes) async {
     final data = Uint8List.fromList(bytes);
-    await _audio.playMp3Bytes(data);
+    // ✅ speed appliqué côté player (just_audio)
+    await _audio.playMp3Bytes(data, speed: _speechSpeed);
   }
 
   Future<List<int>> _ttsUtterance({
@@ -168,6 +179,7 @@ class _StoryScreenState extends State<StoryScreen> {
         : widget.api.baseUrl;
 
     final uri = Uri.parse("$base/api/tts/$sessionId/utterance");
+
     final res = await http.post(
       uri,
       headers: {"Content-Type": "application/json"},
@@ -176,6 +188,8 @@ class _StoryScreenState extends State<StoryScreen> {
         "ageGroup": ageGroup,
         "gender": gender,
         "text": text,
+        // ⚠️ tu peux laisser speed ici (utile si un jour tu repasses sur OpenAI tts-1-hd),
+        // mais avec ElevenLabs ça ne change rien côté serveur.
         "speed": _speechSpeed,
       }),
     );
@@ -188,14 +202,13 @@ class _StoryScreenState extends State<StoryScreen> {
 
   Utterance? _pickUtteranceForQuote(String quote, List<Utterance> queue) {
     if (queue.isEmpty) return null;
-
     final qn = _normalize(quote);
 
     // 1) match exact normalisé
     final idx = queue.indexWhere((u) => _normalize(u.text) == qn);
     if (idx >= 0) return queue.removeAt(idx);
 
-    // 2) match "contient" (souvent utile si l'IA ajoute un mot)
+    // 2) match "contient" (utile si l'IA ajoute/retire un mot)
     final idx2 = queue.indexWhere((u) {
       final un = _normalize(u.text);
       return un.contains(qn) || qn.contains(un);
@@ -208,16 +221,14 @@ class _StoryScreenState extends State<StoryScreen> {
 
   Future<void> playSegmentAudio(StorySegment seg) async {
     if (_audioBusy) return;
-
     final int runId = ++_runId;
+
     setState(() => _audioBusy = true);
 
     try {
       await _audio.stop();
 
       final parts = _splitNarrationWithQuotes(seg.narration);
-
-      // utterances peut être null dans certains JSON => fallback []
       final utterQueue = List<Utterance>.from(seg.utterances);
 
       for (final part in parts) {
@@ -229,9 +240,12 @@ class _StoryScreenState extends State<StoryScreen> {
         if (part.isQuote) {
           final u = _pickUtteranceForQuote(text, utterQueue);
 
-          final speaker  = _safeSpeaker(u?.speaker);
-          final ageGroup = _safeAgeGroup(u?.ageGroup);
-          final gender   = _safeGender(u?.gender);
+          final speaker = _safeSpeaker(u?.speaker);
+          final gender = _safeGender(u?.gender);
+
+          // ✅ Force CHILD UNIQUEMENT si le speaker est le héros
+          final String ageGroup =
+          _isHeroSpeaker(speaker) ? 'CHILD' : _safeAgeGroup(u?.ageGroup);
 
           final bytes = await _ttsUtterance(
             sessionId: seg.sessionId,
@@ -267,7 +281,6 @@ class _StoryScreenState extends State<StoryScreen> {
 
         final prefix = "L'option ${_choiceColorName(i)}.";
         await _speakNarrator(sessionId: seg.sessionId, text: "$prefix $t");
-
         if (!mounted || runId != _runId) return;
       }
     } catch (e) {
@@ -281,7 +294,6 @@ class _StoryScreenState extends State<StoryScreen> {
     }
   }
 
-
   Future<void> _speakNarrator({
     required String sessionId,
     required String text,
@@ -293,13 +305,13 @@ class _StoryScreenState extends State<StoryScreen> {
       gender: 'NEUTRAL',
       text: text,
     );
+
     if (!mounted) return;
     await _playMp3Bytes(bytes);
   }
 
   Future<void> _playChoiceAudio(Choice c, int index) async {
     if (_audioBusy) {
-      // On interrompt la lecture en cours pour relire l'option.
       await _stopAudio();
     }
 
@@ -337,7 +349,6 @@ class _StoryScreenState extends State<StoryScreen> {
 
     try {
       final next = await widget.api.choose(c.id);
-
       if (!mounted) return;
 
       if (next.ended) {
@@ -372,8 +383,7 @@ class _StoryScreenState extends State<StoryScreen> {
 
     final int chapter = seg.displaySegmentIndex + 1;
     final int total = seg.plannedSegments;
-    final chapterText =
-    (total > 0) ? "Chapitre $chapter/$total" : "Chapitre $chapter";
+    final chapterText = (total > 0) ? "Chapitre $chapter/$total" : "Chapitre $chapter";
 
     final disabled = seg.disabledChoiceIds.map((e) => e.toLowerCase()).toSet();
 
@@ -440,6 +450,7 @@ class _StoryScreenState extends State<StoryScreen> {
                 children: seg.choices.asMap().entries.map((entry) {
                   final i = entry.key;
                   final c = entry.value;
+
                   final isDisabled = disabled.contains(c.id.toLowerCase());
                   final color = _choiceColor(i);
 
@@ -448,7 +459,6 @@ class _StoryScreenState extends State<StoryScreen> {
                     child: Opacity(
                       opacity: isDisabled ? 0.45 : 1.0,
                       child: InkWell(
-                        // ✅ options cliquables même si audio joue
                         onTap: isDisabled ? null : () => _tapChoice(c),
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
@@ -477,14 +487,12 @@ class _StoryScreenState extends State<StoryScreen> {
                               ),
                               IconButton(
                                 tooltip: "Relire l'option",
-                                onPressed:
-                                isDisabled ? null : () => _playChoiceAudio(c, i),
+                                onPressed: isDisabled ? null : () => _playChoiceAudio(c, i),
                                 icon: Icon(Icons.volume_up, color: color),
                                 iconSize: 18,
                                 padding: EdgeInsets.zero,
                                 visualDensity: VisualDensity.compact,
-                                constraints:
-                                const BoxConstraints.tightFor(width: 34, height: 34),
+                                constraints: const BoxConstraints.tightFor(width: 34, height: 34),
                               ),
                             ],
                           ),

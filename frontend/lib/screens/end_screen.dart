@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -27,12 +28,13 @@ class EndScreen extends StatefulWidget {
   });
 
   @override
-  State<EndScreen> createState() => _EndScreenState();
+  State createState() => _EndScreenState();
 }
 
 class _EndScreenState extends State<EndScreen> {
   final AudioPlayerService _audio = AudioPlayerService();
 
+  // ⚡️ vitesse de lecture
   static const double _speechSpeed = 1.15;
 
   bool _audioBusy = false;
@@ -60,8 +62,8 @@ class _EndScreenState extends State<EndScreen> {
     final parts = <_NarrPart>[];
 
     final reQuotes = RegExp(r'("([^"]+)")|(«([^»]+)»)', multiLine: true);
-    int idx = 0;
 
+    int idx = 0;
     for (final m in reQuotes.allMatches(s)) {
       if (m.start > idx) {
         parts.add(_NarrPart(false, s.substring(idx, m.start)));
@@ -75,10 +77,12 @@ class _EndScreenState extends State<EndScreen> {
     }
 
     return parts
-        .map((p) => _NarrPart(
-      p.isQuote,
-      p.text.replaceAll(RegExp(r'\s+'), ' ').trim(),
-    ))
+        .map(
+          (p) => _NarrPart(
+        p.isQuote,
+        p.text.replaceAll(RegExp(r'\s+'), ' ').trim(),
+      ),
+    )
         .where((p) => p.text.isNotEmpty)
         .toList();
   }
@@ -108,9 +112,23 @@ class _EndScreenState extends State<EndScreen> {
     return 'NEUTRAL';
   }
 
+  bool _isHeroSpeaker(String speaker) {
+    final sp = speaker.trim();
+    if (sp.isEmpty) return false;
+
+    if (sp.toUpperCase() == 'HERO') return true;
+
+    // le héros = playerName
+    final player = (widget.api.playerName ?? '').trim();
+    if (player.isNotEmpty && sp.toLowerCase() == player.toLowerCase()) return true;
+
+    return false;
+  }
+
   Future<void> _playMp3Bytes(List<int> bytes) async {
     final data = Uint8List.fromList(bytes);
-    await _audio.playMp3Bytes(data);
+    // ✅ speed appliqué côté player
+    await _audio.playMp3Bytes(data, speed: _speechSpeed);
   }
 
   Future<List<int>> _ttsUtterance({
@@ -125,6 +143,7 @@ class _EndScreenState extends State<EndScreen> {
         : widget.api.baseUrl;
 
     final uri = Uri.parse("$base/api/tts/$sessionId/utterance");
+
     final res = await http.post(
       uri,
       headers: {"Content-Type": "application/json"},
@@ -133,6 +152,7 @@ class _EndScreenState extends State<EndScreen> {
         "ageGroup": ageGroup,
         "gender": gender,
         "text": text,
+        // (ElevenLabs ignore côté serveur, mais ok à conserver)
         "speed": _speechSpeed,
       }),
     );
@@ -179,10 +199,14 @@ class _EndScreenState extends State<EndScreen> {
         if (text.isEmpty) continue;
 
         if (part.isQuote) {
-          final u        = _pickUtteranceForQuote(text, utterQueue);
-          final speaker  = _safeSpeaker(u?.speaker);
-          final ageGroup = _safeAgeGroup(u?.ageGroup);
-          final gender   = _safeGender(u?.gender);
+          final u = _pickUtteranceForQuote(text, utterQueue);
+
+          final speaker = _safeSpeaker(u?.speaker);
+          final gender = _safeGender(u?.gender);
+
+          // ✅ Force CHILD UNIQUEMENT si le speaker est le héros
+          final String ageGroup =
+          _isHeroSpeaker(speaker) ? 'CHILD' : _safeAgeGroup(u?.ageGroup);
 
           final bytes = await _ttsUtterance(
             sessionId: seg.sessionId,
@@ -208,6 +232,7 @@ class _EndScreenState extends State<EndScreen> {
         }
       }
 
+      // explication lue à la fin
       final expl = seg.explanation.trim();
       if (expl.isNotEmpty) {
         final bytes = await _ttsUtterance(
@@ -217,7 +242,6 @@ class _EndScreenState extends State<EndScreen> {
           gender: 'NEUTRAL',
           text: "Explication : $expl",
         );
-
         if (!mounted || runId != _runId) return;
         await _playMp3Bytes(bytes);
       }
@@ -244,8 +268,7 @@ class _EndScreenState extends State<EndScreen> {
 
     final int chapter = seg.displaySegmentIndex + 1;
     final int total = seg.plannedSegments;
-    final chapterText =
-    (total > 0) ? "Chapitre $chapter/$total" : "Chapitre $chapter";
+    final chapterText = (total > 0) ? "Chapitre $chapter/$total" : "Chapitre $chapter";
 
     final outOfLives = seg.livesRemaining <= 0;
 
@@ -291,7 +314,6 @@ class _EndScreenState extends State<EndScreen> {
             icon: const Icon(Icons.stop),
           ),
         ],
-
       ),
       body: SafeArea(
         child: Padding(
@@ -342,7 +364,7 @@ class _EndScreenState extends State<EndScreen> {
                       ),
                     );
                   },
-                  child: Text(outOfLives ? "🏁 Fin" : "🔁 Revenir en arrière"),
+                  child: Text(outOfLives ? "Fin" : "Revenir en arrière"),
                 ),
               ),
             ],

@@ -31,7 +31,7 @@ public class OpenAiTtsService {
 
     private static final String DEFAULT_TTS_LOCALE = "fr-FR";
 
-    // OpenAI: voix supportées par tts-1 / tts-1-hd (set “plus petit”) :contentReference[oaicite:2]{index=2}
+    // OpenAI: voix supportées par tts-1 / tts-1-hd (set “plus petit”)
     private static final Set<String> TTS1_VOICES = Set.of(
             "alloy", "ash", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer"
     );
@@ -77,7 +77,9 @@ public class OpenAiTtsService {
     }
 
     private String buildInstructions(String locale, String ageGroup, String plannerInstructions) {
-        String effectiveLocale = (locale == null || locale.isBlank()) ? DEFAULT_TTS_LOCALE : locale.trim();
+        String effectiveLocale = (locale == null || locale.isBlank())
+                ? DEFAULT_TTS_LOCALE
+                : locale.trim();
 
         boolean forceFrench = effectiveLocale.equalsIgnoreCase("fr-FR") || effectiveLocale.equalsIgnoreCase("fr");
         if (!forceFrench) return plannerInstructions;
@@ -109,14 +111,27 @@ public class OpenAiTtsService {
         StorySession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalStateException("Session not found"));
 
-        // Force ageGroup=CHILD si le locuteur est le héros (speaker="HERO" ou correspond au playerName)
+        // ✅ Force ageGroup=CHILD si le locuteur est le héros
         String effectiveAgeGroup = ageGroup;
-        if ("HERO".equalsIgnoreCase(speaker)
-                || (session.getPlayerName() != null && session.getPlayerName().equalsIgnoreCase(speaker))) {
+
+        String speakerNorm = (speaker == null) ? "" : speaker.trim();
+        String playerNorm = (session.getPlayerName() == null) ? "" : session.getPlayerName().trim();
+
+        boolean isHero =
+                "HERO".equalsIgnoreCase(speakerNorm) ||
+                        (!playerNorm.isEmpty() && playerNorm.equalsIgnoreCase(speakerNorm));
+
+        if (isHero) {
             effectiveAgeGroup = "CHILD";
         }
 
-        var spec = VoicePlanner.pick(session.getStorySeed(), speaker, effectiveAgeGroup, gender, session.getTargetAge());
+        var spec = VoicePlanner.pick(
+                session.getStorySeed(),
+                speaker,
+                effectiveAgeGroup,
+                gender,
+                session.getTargetAge()
+        );
 
         String safeText = (text == null) ? "" : text;
         if (safeText.isBlank()) {
@@ -137,7 +152,7 @@ public class OpenAiTtsService {
             body.put("instructions", buildInstructions(locale, effectiveAgeGroup, spec.instructions()));
         }
 
-        // ✅ speed uniquement pour tts-1 / tts-1-hd (sinon 400 avec gpt-4o-mini-tts) :contentReference[oaicite:3]{index=3}
+        // ✅ speed uniquement pour tts-1 / tts-1-hd (sinon 400 avec gpt-4o-mini-tts)
         if (modelSupportsSpeed(TTS_MODEL)) {
             body.put("speed", effectiveSpeed);
         }
