@@ -89,6 +89,8 @@ RÈGLES SUR LES CHOIX:
      * Titre court (smartphone), max ~50-60 caractères.
      */
     public static final String TITLE_PROMPT = """
+Voix française native (France). Accent français naturel.
+Prononciation parfaite des mots français.
 Tu génères un titre court et accrocheur pour une histoire interactive enfant.
 Retourne STRICTEMENT un JSON valide:
 { "title": "..." }

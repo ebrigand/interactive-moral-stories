@@ -28,7 +28,7 @@ public class OpenAiTtsService {
 
     // Voix supportées par tts-1 / tts-1-hd
     private static final String[] TTS1_VOICES = {
-            "alloy", "ash", "coral", "echo", "onyx", "nova", "sage", "shimmer"
+            "ash", "onyx", "sage"
     };
 
     private static final double DEFAULT_SPEED = 1.0;
