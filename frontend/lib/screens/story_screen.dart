@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -36,10 +35,9 @@ class _StoryScreenState extends State<StoryScreen> {
   final AudioPlayerService _audio = AudioPlayerService();
 
   // ⚡️ Vitesse de lecture (1.0 = normal). +15% => 1.15
-  static const double _speechSpeed = 1.1;
+  static const double _speechSpeed = 1.15;
 
   late StorySegment current;
-
   bool _loading = false;
   bool _audioBusy = false;
   int _runId = 0;
@@ -150,21 +148,9 @@ class _StoryScreenState extends State<StoryScreen> {
     return 'NEUTRAL';
   }
 
-  bool _isHeroSpeaker(String speaker) {
-    final sp = speaker.trim();
-    if (sp.isEmpty) return false;
-    if (sp.toUpperCase() == 'HERO') return true;
-
-    final player = (widget.api.playerName ?? '').trim();
-    if (player.isNotEmpty && sp.toLowerCase() == player.toLowerCase()) return true;
-
-    return false;
-  }
-
   Future<void> _playMp3Bytes(List<int> bytes) async {
     final data = Uint8List.fromList(bytes);
-    // ✅ speed appliqué côté player (just_audio)
-    await _audio.playMp3Bytes(data, speed: _speechSpeed);
+    await _audio.playMp3Bytes(data);
   }
 
   Future<List<int>> _ttsUtterance({
@@ -188,8 +174,6 @@ class _StoryScreenState extends State<StoryScreen> {
         "ageGroup": ageGroup,
         "gender": gender,
         "text": text,
-        // ⚠️ tu peux laisser speed ici (utile si un jour tu repasses sur OpenAI tts-1-hd),
-        // mais avec ElevenLabs ça ne change rien côté serveur.
         "speed": _speechSpeed,
       }),
     );
@@ -208,7 +192,7 @@ class _StoryScreenState extends State<StoryScreen> {
     final idx = queue.indexWhere((u) => _normalize(u.text) == qn);
     if (idx >= 0) return queue.removeAt(idx);
 
-    // 2) match "contient" (utile si l'IA ajoute/retire un mot)
+    // 2) match "contient"
     final idx2 = queue.indexWhere((u) {
       final un = _normalize(u.text);
       return un.contains(qn) || qn.contains(un);
@@ -229,6 +213,8 @@ class _StoryScreenState extends State<StoryScreen> {
       await _audio.stop();
 
       final parts = _splitNarrationWithQuotes(seg.narration);
+
+      // utterances peut être null dans certains JSON => fallback []
       final utterQueue = List<Utterance>.from(seg.utterances);
 
       for (final part in parts) {
@@ -241,11 +227,8 @@ class _StoryScreenState extends State<StoryScreen> {
           final u = _pickUtteranceForQuote(text, utterQueue);
 
           final speaker = _safeSpeaker(u?.speaker);
+          final ageGroup = _safeAgeGroup(u?.ageGroup);
           final gender = _safeGender(u?.gender);
-
-          // ✅ Force CHILD UNIQUEMENT si le speaker est le héros
-          final String ageGroup =
-          _isHeroSpeaker(speaker) ? 'CHILD' : _safeAgeGroup(u?.ageGroup);
 
           final bytes = await _ttsUtterance(
             sessionId: seg.sessionId,
@@ -260,7 +243,7 @@ class _StoryScreenState extends State<StoryScreen> {
         } else {
           final bytes = await _ttsUtterance(
             sessionId: seg.sessionId,
-            speaker: 'CHOICE_NARRATOR',
+            speaker: 'NARRATOR',
             ageGroup: 'ADULT',
             gender: 'NEUTRAL',
             text: text,
@@ -271,7 +254,7 @@ class _StoryScreenState extends State<StoryScreen> {
         }
       }
 
-      // Lecture des options (voix narrateur adulte neutre)
+      // Lecture des options
       for (int i = 0; i < seg.choices.length; i++) {
         final c = seg.choices[i];
         if (!mounted || runId != _runId) return;
@@ -281,6 +264,7 @@ class _StoryScreenState extends State<StoryScreen> {
 
         final prefix = "L'option ${_choiceColorName(i)}.";
         await _speakNarrator(sessionId: seg.sessionId, text: "$prefix $t");
+
         if (!mounted || runId != _runId) return;
       }
     } catch (e) {
@@ -294,18 +278,19 @@ class _StoryScreenState extends State<StoryScreen> {
     }
   }
 
+  // ✅ IMPORTANT : ce helper sert aux OPTIONS (et au bouton speaker des options)
+  // => on envoie CHOICE_NARRATOR pour passer dans le bon bloc backend (accent verrouillé)
   Future<void> _speakNarrator({
     required String sessionId,
     required String text,
   }) async {
     final bytes = await _ttsUtterance(
       sessionId: sessionId,
-      speaker: 'NARRATOR',
+      speaker: 'CHOICE_NARRATOR', // ✅ au lieu de NARRATOR
       ageGroup: 'ADULT',
       gender: 'NEUTRAL',
       text: text,
     );
-
     if (!mounted) return;
     await _playMp3Bytes(bytes);
   }
@@ -314,7 +299,6 @@ class _StoryScreenState extends State<StoryScreen> {
     if (_audioBusy) {
       await _stopAudio();
     }
-
     final int runId = ++_runId;
     setState(() => _audioBusy = true);
 
@@ -380,11 +364,9 @@ class _StoryScreenState extends State<StoryScreen> {
   @override
   Widget build(BuildContext context) {
     final seg = current;
-
     final int chapter = seg.displaySegmentIndex + 1;
     final int total = seg.plannedSegments;
     final chapterText = (total > 0) ? "Chapitre $chapter/$total" : "Chapitre $chapter";
-
     final disabled = seg.disabledChoiceIds.map((e) => e.toLowerCase()).toSet();
 
     return Scaffold(
@@ -463,10 +445,7 @@ class _StoryScreenState extends State<StoryScreen> {
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 12,
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(width: 1, color: color),
