@@ -49,13 +49,13 @@ public final class VoicePlanner {
         } else {
             if ("FEMALE".equals(g)) {
                 pool         = ADULT_FEMALE_VOICES;
-                instructions = "Warm female voice, expressive, suitable for children's stories.";
+                instructions = "Voix féminine chaleureuse et expressive, adaptée aux histoires pour enfants.";
             } else if ("MALE".equals(g)) {
                 pool         = ADULT_MALE_VOICES;
-                instructions = "Warm male voice, expressive, suitable for children's stories.";
+                instructions = "Voix masculine chaleureuse et expressive, adaptée aux histoires pour enfants.";
             } else {
                 pool         = NEUTRAL_VOICES;
-                instructions = "Warm narrator voice, expressive, suitable for children.";
+                instructions = "Voix de narrateur chaleureuse et expressive, adaptée aux enfants.";
             }
         }
 
