@@ -260,7 +260,7 @@ class _StoryScreenState extends State<StoryScreen> {
         } else {
           final bytes = await _ttsUtterance(
             sessionId: seg.sessionId,
-            speaker: 'NARRATOR',
+            speaker: 'CHOICE_NARRATOR',
             ageGroup: 'ADULT',
             gender: 'NEUTRAL',
             text: text,

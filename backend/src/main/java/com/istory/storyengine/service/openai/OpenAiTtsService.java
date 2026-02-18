@@ -18,38 +18,36 @@ public class OpenAiTtsService {
     private final WebClient openAiWebClient;
     private final StorySessionRepository sessionRepository;
 
-    // ✅ Modèle stable pour le narrateur
+    // ✅ Narration stable + speed
     private static final String NARRATOR_MODEL = "tts-1-hd";
 
-    // ✅ Modèle expressif pour dialogues
-    private static final String DIALOGUE_MODEL = "gpt-4o-mini-tts";
+    // ✅ Dialogues + options : instructions (accent verrouillé)
+    private static final String INSTRUCT_MODEL = "gpt-4o-mini-tts";
 
-    private static final String DEFAULT_TTS_LOCALE = "fr-FR";
-
-    // Voix supportées par tts-1 / tts-1-hd
-    private static final String[] TTS1_VOICES = {
-            "ash", "onyx", "sage"
+    // ✅ alloy exclu
+    private static final String[] TTS_VOICES = {
+            "sage"
     };
 
     private static final double DEFAULT_SPEED = 1.0;
     private static final double MIN_SPEED = 0.25;
     private static final double MAX_SPEED = 4.0;
 
-    private static final String FORCE_FRENCH_CHILD_INSTRUCTIONS = String.join("\n",
-            "Tu parles en français avec un accent de France.",
-            "Tu as une voix d'enfant naturelle et spontanée.",
-            "Prononce correctement les noms propres français."
+    // ✅ Accent FR verrouillé (adulte)
+    private static final String FR_ADULT_LOCKED = String.join("\n",
+            "Tu parles en français avec un accent de France (France métropolitaine uniquement).",
+            "Aucun accent anglais. Aucun accent québécois/belge/suisse/africain.",
+            "Diction naturelle, articulée, stable.",
+            "Ne change pas d'accent entre les phrases."
     );
 
-    private static final String FORCE_FRENCH_ADULT_INSTRUCTIONS = String.join("\n",
-            "Tu es une voix française naturelle.",
-            "Accent de France.",
-            "Diction claire et fluide."
+    // ✅ Accent FR verrouillé (enfant)
+    private static final String FR_CHILD_LOCKED = String.join("\n",
+            "Tu parles en français avec un accent de France (France métropolitaine uniquement).",
+            "Voix d'enfant naturelle, légère, spontanée (pas caricaturale).",
+            "Aucun accent anglais. Aucun accent québécois/belge/suisse/africain.",
+            "Diction stable, ne change pas d'accent entre les phrases."
     );
-
-    private boolean modelSupportsInstructions(String model) {
-        return model.startsWith("gpt-4o-mini-tts");
-    }
 
     private boolean modelSupportsSpeed(String model) {
         return model.equals("tts-1") || model.equals("tts-1-hd");
@@ -63,22 +61,32 @@ public class OpenAiTtsService {
         return s;
     }
 
-    private boolean isHero(StorySession session, String speaker) {
-        if ("HERO".equalsIgnoreCase(speaker)) return true;
-        String player = session.getPlayerName();
-        return player != null && !player.isBlank()
-                && player.trim().equalsIgnoreCase(speaker);
-    }
-
     private boolean isNarrator(String speaker) {
         return "NARRATOR".equalsIgnoreCase(speaker);
     }
 
-    // ✅ Voix narrateur stable basée sur le storySeed
+    // ✅ Pour les options on utilise un speaker dédié
+    private boolean isChoiceNarrator(String speaker) {
+        return "CHOICE_NARRATOR".equalsIgnoreCase(speaker);
+    }
+
+    private boolean isHero(StorySession session, String speaker) {
+        if ("HERO".equalsIgnoreCase(speaker)) return true;
+        String player = session.getPlayerName();
+        return player != null && !player.isBlank() && player.trim().equalsIgnoreCase(speaker);
+    }
+
+    // Narrateur stable par session
     private String pickStableNarratorVoice(UUID sessionId) {
-        int hash = Math.abs(sessionId.hashCode());
-        int index = hash % TTS1_VOICES.length;
-        return TTS1_VOICES[index];
+        int idx = Math.abs(sessionId.hashCode()) % TTS_VOICES.length;
+        return TTS_VOICES[idx];
+    }
+
+    // Voix stable par session + speaker
+    private String pickStableVoice(UUID sessionId, String speaker) {
+        String key = sessionId.toString() + "|" + (speaker == null ? "" : speaker.trim().toLowerCase());
+        int idx = Math.abs(key.hashCode()) % TTS_VOICES.length;
+        return TTS_VOICES[idx];
     }
 
     public byte[] synthesizeUtterance(
@@ -90,7 +98,6 @@ public class OpenAiTtsService {
             Double speed,
             String locale
     ) {
-
         StorySession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalStateException("Session not found"));
 
@@ -99,11 +106,10 @@ public class OpenAiTtsService {
 
         String speakerNorm = (speaker == null) ? "" : speaker.trim();
 
-        // ================================
-        // 🎙 NARRATEUR (stable pour toute l'histoire)
-        // ================================
+        // =========================
+        // 🎙 NARRATION (stable)
+        // =========================
         if (isNarrator(speakerNorm)) {
-
             String narratorVoice = pickStableNarratorVoice(sessionId);
 
             Map<String, Object> body = new HashMap<>();
@@ -111,7 +117,10 @@ public class OpenAiTtsService {
             body.put("voice", narratorVoice);
             body.put("response_format", "mp3");
             body.put("input", safeText);
-            body.put("speed", clampSpeed(speed)); // speed supporté ici
+
+            if (modelSupportsSpeed(NARRATOR_MODEL)) {
+                body.put("speed", clampSpeed(speed));
+            }
 
             return openAiWebClient.post()
                     .uri("/audio/speech")
@@ -123,38 +132,44 @@ public class OpenAiTtsService {
                     .block();
         }
 
-        // ================================
-        // 🎭 DIALOGUES
-        // ================================
-        String effectiveAgeGroup = ageGroup;
+        // =========================
+        // 🧾 OPTIONS : gpt-4o-mini-tts + FR verrouillé
+        // =========================
+        if (isChoiceNarrator(speakerNorm)) {
 
-        if (isHero(session, speakerNorm)) {
-            effectiveAgeGroup = "CHILD";
+            String v = pickStableVoice(sessionId, "CHOICE_NARRATOR");
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("model", INSTRUCT_MODEL);
+            body.put("voice", v);
+            body.put("response_format", "mp3");
+            body.put("input", safeText);
+            body.put("instructions", FR_ADULT_LOCKED);
+
+            return openAiWebClient.post()
+                    .uri("/audio/speech")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.valueOf("audio/mpeg"))
+                    .bodyValue(body)
+                    .retrieve()
+                    .bodyToMono(byte[].class)
+                    .block();
         }
+
+        // =========================
+        // 🎭 DIALOGUES : gpt-4o-mini-tts + FR verrouillé
+        // =========================
+        boolean hero = isHero(session, speakerNorm);
+        String effectiveAge = hero ? "CHILD" : (ageGroup == null ? "ADULT" : ageGroup.trim());
+
+        String dialogueVoice = pickStableVoice(sessionId, speakerNorm);
 
         Map<String, Object> body = new HashMap<>();
-        body.put("model", DIALOGUE_MODEL);
-        body.put("voice", "alloy"); // base voice pour dialogues
+        body.put("model", INSTRUCT_MODEL);
+        body.put("voice", dialogueVoice);
         body.put("response_format", "mp3");
         body.put("input", safeText);
-
-        if (modelSupportsInstructions(DIALOGUE_MODEL)) {
-
-            boolean isFrench = locale == null
-                    || locale.isBlank()
-                    || locale.equalsIgnoreCase("fr")
-                    || locale.equalsIgnoreCase("fr-FR");
-
-            if (isFrench) {
-                String instructions = "CHILD".equalsIgnoreCase(effectiveAgeGroup)
-                        ? FORCE_FRENCH_CHILD_INSTRUCTIONS
-                        : FORCE_FRENCH_ADULT_INSTRUCTIONS;
-
-                body.put("instructions", instructions);
-            }
-        }
-
-        // ⚠️ PAS de speed ici (sinon 400)
+        body.put("instructions", hero ? FR_CHILD_LOCKED : FR_ADULT_LOCKED);
 
         return openAiWebClient.post()
                 .uri("/audio/speech")

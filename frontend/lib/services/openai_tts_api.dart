@@ -9,7 +9,7 @@ class OpenAiTtsApi {
 
   Future<Uint8List> synthesize({
     required String text,
-    String voice = "alloy",
+    String voice =  "onyx",
     String format = "mp3",
   }) async {
     final uri = Uri.parse("$baseUrl/api/tts");
