@@ -8,12 +8,12 @@ spring:
 
 openai:
   base-url: https://api.openai.com/v1
-  api-key: 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
+  api-key:
   model: gpt-4.1
   timeout-seconds: 30
   api:
-    key: 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
-  tts:
+    key:
+      tts:
     model: gpt-4o-mini-tts
 
 logging:
@@ -22,3 +22,5 @@ logging:
     com.istory.storyengine: DEBUG
     org.springframework.web: DEBUG
     org.hibernate.SQL: WARN
+
+
