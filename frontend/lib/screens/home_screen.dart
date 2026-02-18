@@ -118,16 +118,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   // 🎯 Âge
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Expanded(
-                        child: Text(
-                          "Âge",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
+                      const Text(
+                        "Âge : ",
+                        style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                       Text(
                         "$_age",
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -159,16 +158,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   // 📚 Chapitres (remplace la durée)
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Expanded(
-                        child: Text(
-                          "Nombre de chapitres",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
+                      const Text(
+                        "Nombre de chapitres : ",
+                        style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                       Text(
-                        "$_chapterCount chap.",
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        "$_chapterCount",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
