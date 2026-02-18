@@ -8,11 +8,11 @@ spring:
 
 openai:
   base-url: https://api.openai.com/v1
-  api-key: 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
+  api-key: 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
   model: gpt-4.1
   timeout-seconds: 30
   api:
-    key: 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
+    key: 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
   tts:
     model: gpt-4o-mini-tts
 

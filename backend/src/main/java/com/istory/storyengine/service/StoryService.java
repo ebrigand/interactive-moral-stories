@@ -5,11 +5,7 @@ import com.istory.storyengine.dto.ChoiceRequest;
 import com.istory.storyengine.dto.RewindResponse;
 import com.istory.storyengine.dto.StartStoryRequest;
 import com.istory.storyengine.dto.StorySegmentResponse;
-import com.istory.storyengine.model.Choice;
-import com.istory.storyengine.model.StoryNode;
-import com.istory.storyengine.model.StorySegment;
-import com.istory.storyengine.model.StorySession;
-import com.istory.storyengine.model.StoryStatus;
+import com.istory.storyengine.model.*;
 import com.istory.storyengine.repository.StoryNodeRepository;
 import com.istory.storyengine.repository.StorySessionRepository;
 import com.istory.storyengine.service.prompt.PromptBuilder;
@@ -312,6 +308,8 @@ public class StoryService {
 
                 StorySegment segment = mapper.readValue(segmentJson, StorySegment.class);
 
+                normalizeUtterances(segment, session.getPlayerName());
+
                 if (failureImminent && !segment.isEnded()) {
                     if (attempt == 1) continue;
                     throw new IllegalStateException("AI did not end story while failureImminent=true. raw=" + segmentJson);
@@ -356,6 +354,38 @@ public class StoryService {
 
         } catch (Exception e) {
             throw new RuntimeException("Failed to generate story segment", e);
+        }
+    }
+
+    /**
+     * Normalise les champs de chaque Utterance après désérialisation du JSON de l'IA :
+     * - Force ageGroup="CHILD" pour le héros (speaker=HERO ou playerName)
+     * - Défaut ageGroup="ADULT" si absent/vide
+     * - Normalise gender en majuscules ; défaut "NEUTRAL" si invalide/absent
+     */
+    private void normalizeUtterances(StorySegment segment, String playerName) {
+        if (segment.getUtterances() == null) return;
+
+        for (Utterance u : segment.getUtterances()) {
+            if (u == null) continue;
+
+            String speaker = u.getSpeaker() == null ? "" : u.getSpeaker().trim();
+
+            // Force CHILD pour le héros
+            boolean isHero = "HERO".equalsIgnoreCase(speaker)
+                    || (playerName != null && playerName.equalsIgnoreCase(speaker));
+            if (isHero) {
+                u.setAgeGroup("CHILD");
+            } else if (u.getAgeGroup() == null || u.getAgeGroup().isBlank()) {
+                u.setAgeGroup("ADULT");
+            }
+
+            // Normalise gender
+            String g = u.getGender() == null ? "" : u.getGender().trim().toUpperCase();
+            if (!g.equals("MALE") && !g.equals("FEMALE") && !g.equals("NEUTRAL")) {
+                g = "NEUTRAL";
+            }
+            u.setGender(g);
         }
     }
 
