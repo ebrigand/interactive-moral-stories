@@ -18,7 +18,6 @@ public class StoryController {
 
     private final StoryService storyService;
 
-    @ExceptionHandler
     @PostMapping("/start")
     public StorySegmentResponse start(@Valid @RequestBody StartStoryRequest req) {
         return storyService.start(req);

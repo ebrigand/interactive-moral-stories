@@ -36,7 +36,7 @@ class _StoryScreenState extends State<StoryScreen> {
   final AudioPlayerService _audio = AudioPlayerService();
 
   // ⚡️ Vitesse de lecture (1.0 = normal). +15% => 1.15
-  static const double _speechSpeed = 1.15;
+  static const double _speechSpeed = 1.1;
 
   late StorySegment current;
 

@@ -35,7 +35,7 @@ class _EndScreenState extends State<EndScreen> {
   final AudioPlayerService _audio = AudioPlayerService();
 
   // ⚡️ vitesse de lecture
-  static const double _speechSpeed = 1.15;
+  static const double _speechSpeed = 1.1;
 
   bool _audioBusy = false;
   int _runId = 0;
